@@ -1,6 +1,7 @@
 """Games, or Adversarial Search (Chapter 5)"""
 
 from collections import namedtuple
+import itertools
 import random
 
 from .utils import argmax
@@ -10,7 +11,6 @@ GameState = namedtuple('GameState', 'to_move, utility, board, moves')
 
 # ______________________________________________________________________________
 # Minimax Search
-
 
 def minimax_decision(state, game):
     """Given a state in a game, calculate the best move by searching
@@ -130,37 +130,10 @@ def alphabeta_cutoff_search(state, game, d=4, cutoff_test=None, eval_fn=None):
     return best_action
 
 # ______________________________________________________________________________
-# Players for Games
-
-
-def query_player(game, state):
-    """Make a move by querying standard input."""
-    print("current state:")
-    game.display(state)
-    print("available moves: {}".format(game.actions(state)))
-    print("")
-    move_string = input('Your move? ')
-    try:
-        move = eval(move_string)
-    except NameError:
-        move = move_string
-    return move
-
-
-def random_player(game, state):
-    """A player that chooses a legal move at random."""
-    return random.choice(game.actions(state))
-
-
-def alphabeta_player(game, state):
-    return alphabeta_search(state, game)
-
-
-# ______________________________________________________________________________
 # Some Sample Games
 
 
-class Game:
+class Game():
     """A game is similar to a problem, but it has a utility for each
     state and a terminal test instead of a path cost and a goal
     test. To create a game, subclass this class and implement actions,
@@ -168,6 +141,9 @@ class Game:
     successors or you can inherit their default methods. You will also
     need to set the .initial attribute to the initial state; this can
     be done in the constructor."""
+
+    def reset(self):
+        pass
 
     def actions(self, state):
         """Return a list of the allowable moves at this point."""
@@ -196,18 +172,60 @@ class Game:
     def __repr__(self):
         return '<{}>'.format(self.__class__.__name__)
 
-    def play_game(self, *players):
+    def tournament(self, matches, *players, verbose=0):
+        results = {"DRAW": 0}
+        for player in players:
+            results[player.name] = 0
+        pairings = [(a,b) for (a,b) in itertools.product(players, players) if a != b]
+        for (p1, p2) in pairings:
+            result = self.play_matches(matches, p1, p2, verbose=verbose)
+            for player_name in result:
+                results[player_name] += result[player_name]
+        return results
+
+    def play_matches(self, count, *players, verbose=0):
+        results = {"DRAW": 0}
+        for player in players:
+            results[player.name] = 0
+        for i in range(count):
+            result = self.play_game(*players, verbose=verbose)
+            for player_name in result:
+                results[player_name] += 1
+        return results
+
+    def play_game(self, *players, flip_coin=True, verbose=1):
         """Play an n-person, move-alternating game."""
+        if len(players) == 0:
+            raise Exception("Need at least 1 player")
+        self.reset()
         state = self.initial
+        if flip_coin:
+            players = list(players)
+            random.shuffle(players)
+        for player in players:
+            move = player.set_game(self) ## do initialization, reset here
+        turn = 1
         while True:
             for player in players:
-                move = player(self, state)
+                if verbose:
+                    print("%s is thinking..." % player.name)
+                move = player.get_action(state, turn)
                 state = self.result(state, move)
-                if self.terminal_test(state):
+                if verbose:
+                    print("%s makes action %s:" % (player.name, move))
                     self.display(state)
-                    return self.utility(state, self.to_move(self.initial))
-
-
+                if self.terminal_test(state):
+                    result = self.utility(state, self.to_move(self.initial))
+                    if result == 1:
+                        retval = [players[0].name]
+                    elif result == -1:
+                        retval = [p.name for p in players[1:]]
+                    elif result == 0:
+                        retval = ["DRAW"]
+                    if verbose:
+                        print("***** %s wins!" % ",".join(retval))
+                    return retval
+            turn += 1
 class Fig52Game(Game):
     """The game represented in [Figure 5.2]. Serves as a simple test case."""
 
@@ -241,7 +259,8 @@ class Fig52Extended(Game):
     """Similar to Fig52Game but bigger. Useful for visualisation"""
 
     succs = {i:dict(l=i*3+1, m=i*3+2, r=i*3+3) for i in range(13)}
-    utils = dict()
+    utils = {}
+    initial = 1
 
     def actions(self, state):
         return sorted(list(self.succs.get(state, {}).keys()))
@@ -251,9 +270,9 @@ class Fig52Extended(Game):
 
     def utility(self, state, player):
         if player == 'MAX':
-            return self.utils[state]
+            return self.utils.get(state, 0)
         else:
-            return -self.utils[state]
+            return -self.utils.get(state, 0)
 
     def terminal_test(self, state):
         return state not in range(13)
@@ -271,8 +290,8 @@ class TicTacToe(Game):
         self.h = h
         self.v = v
         self.k = k
-        moves = [(x, y) for x in range(1, h + 1)
-                 for y in range(1, v + 1)]
+        moves = [(x, y) for x in range(1, self.h + 1)
+                 for y in range(1, self.v + 1)]
         self.initial = GameState(to_move='X', utility=0, board={}, moves=moves)
 
     def actions(self, state):
@@ -330,7 +349,6 @@ class TicTacToe(Game):
         n -= 1  # Because we counted move itself twice
         return n >= self.k
 
-
 class ConnectFour(TicTacToe):
     """A TicTacToe-like game in which you can only make a move on the bottom
     row, or in a square directly above an occupied square.  Traditionally
@@ -342,3 +360,73 @@ class ConnectFour(TicTacToe):
     def actions(self, state):
         return [(x, y) for (x, y) in state.moves
                 if y == 1 or (x, y - 1) in state.board]
+
+    def display(self, state):
+        board = state.board
+        for y in range(self.v + 1, 0, -1):
+            for x in range(1, self.h + 1):
+                print(board.get((x, y), '.'), end=' ')
+            print()
+
+# ______________________________________________________________________________
+# Players for Games
+
+class Player():
+    """
+    """
+    def __init__(self, name):
+        self.name = name
+
+    def set_game(self, game):
+        ## do init or reset business here in overload
+        self.game = game
+
+    def get_action(self, state, turn):
+        raise NotImplementedError()
+
+class QueryPlayer(Player):
+    """
+    """
+    def get_action(self, state, turn):
+        """Make a move by querying standard input."""
+        print("current state:")
+        self.game.display(state)
+        print("available moves: {}".format(self.game.actions(state)))
+        print("")
+        move_string = input('Your move? ')
+        try:
+            move = eval(move_string)
+        except NameError:
+            move = move_string
+        return move
+
+class RandomPlayer(Player):
+    def get_action(self, state, turn):
+        """A player that chooses a legal move at random."""
+        return random.choice(self.game.actions(state))
+
+class AlphaBetaPlayer(Player):
+    def get_action(self, state, turn):
+        return alphabeta_search(state, self.game)
+
+class MiniMaxPlayer(Player):
+    def get_action(self, state, turn):
+        return minimax_decision(state, self.game)
+
+class AlphaBetaCutoffPlayer(Player):
+    def get_action(self, state, turn):
+        return alphabeta_cutoff_search(state, self.game, d=4,
+                                       cutoff_test=None, eval_fn=None)
+
+from .mcts import MCTSPlayer
+
+players = [
+    RandomPlayer("Random"),
+    AlphaBetaPlayer("AlphaBeta"),
+    MiniMaxPlayer("Minimax"),
+    AlphaBetaCutoffPlayer("AlphaBetaCutoff"),
+    MCTSPlayer("MonteCarloTreeSearch")
+]
+
+# game = TicTacToe()
+# game.tournament(1, *players, verbose=1)
