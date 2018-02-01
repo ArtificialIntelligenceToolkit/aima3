@@ -4,7 +4,10 @@ from collections import namedtuple
 import itertools
 import random
 
+import numpy as np
+
 from .utils import argmax
+from .mcts import MCTS
 
 infinity = float('inf')
 GameState = namedtuple('GameState', 'to_move, utility, board, moves')
@@ -172,28 +175,49 @@ class Game():
     def __repr__(self):
         return '<{}>'.format(self.__class__.__name__)
 
-    def tournament(self, matches, *players, verbose=0):
+    def play_tournament(self, matches, *players, mode="random", verbose=0, **kwargs):
+        """
+        mode -
+          "random" - randomly select who gos first
+          "ordered" - play in order given
+          ""one-each" - play each pairing twice, changing who goes first
+        """
         results = {"DRAW": 0}
         for player in players:
             results[player.name] = 0
         pairings = [(a,b) for (a,b) in itertools.product(players, players) if a != b]
         for (p1, p2) in pairings:
-            result = self.play_matches(matches, p1, p2, verbose=verbose)
-            for player_name in result:
-                results[player_name] += result[player_name]
+            if mode == "one-each":
+                result = self.play_matches(matches, p1, p2, flip_coin=False, verbose=verbose, **kwargs)
+                for player_name in result:
+                    results[player_name] += result[player_name]
+                result = self.play_matches(matches, p2, p1, flip_coin=False, verbose=verbose, **kwargs)
+                for player_name in result:
+                    results[player_name] += result[player_name]
+            else:
+                result = self.play_matches(matches, p1, p2, flip_coin=(mode=="random"), verbose=verbose, **kwargs)
+                for player_name in result:
+                    results[player_name] += result[player_name]
         return results
 
-    def play_matches(self, count, *players, verbose=0):
+    def play_matches(self, matches, *players, flip_coin=True, verbose=0, **kwargs):
         results = {"DRAW": 0}
         for player in players:
             results[player.name] = 0
-        for i in range(count):
-            result = self.play_game(*players, verbose=verbose)
+        for i in range(matches):
+            result = self.play_game(*players, flip_coin=flip_coin, verbose=verbose, **kwargs)
             for player_name in result:
                 results[player_name] += 1
         return results
 
-    def play_game(self, *players, flip_coin=True, verbose=1):
+    def get_action(self, player, state, turn, **kwargs):
+        """
+        Level of indirection for overriding this method.
+        """
+        move = player.get_action(state, turn, **kwargs)
+        return move
+
+    def play_game(self, *players, flip_coin=True, verbose=1, **kwargs):
         """Play an n-person, move-alternating game."""
         if len(players) == 0:
             raise Exception("Need at least 1 player")
@@ -209,7 +233,7 @@ class Game():
             for player in players:
                 if verbose:
                     print("%s is thinking..." % player.name)
-                move = player.get_action(state, turn)
+                move = self.get_action(player, state, turn, **kwargs)
                 state = self.result(state, move)
                 if verbose:
                     print("%s makes action %s:" % (player.name, move))
@@ -418,7 +442,70 @@ class AlphaBetaCutoffPlayer(Player):
         return alphabeta_cutoff_search(state, self.game, d=4,
                                        cutoff_test=None, eval_fn=None)
 
-from .mcts import MCTSPlayer
+class MCTSPlayer(Player):
+    """AI player based on MCTS"""
+    def __init__(self, name, n_playout=20, random_turns=2,
+                 c_puct=5, is_selfplay=True):
+        super().__init__(name)
+        self.n_playout = n_playout
+        self.random_turns = random_turns
+        self.c_puct = c_puct
+        self.is_selfplay = is_selfplay
+
+    def policy(self, game, state):
+        """
+        A function that takes in a board state and outputs a list of
+        (action, probability) tuples and also a score in [-1, 1]
+        (i.e. the expected value of the end game score from the
+        current player's perspective) for the current player.
+        """
+        value = game.utility(state, game.to_move(state))
+        actions = game.actions(state)
+        if len(actions) == 0:
+            return [], value
+        else:
+            prob = 1/len(actions)
+            return [(action, prob) for action in actions], value
+
+    def set_game(self, game):
+        self.game = game
+        self.mcts = MCTS(self.game, self.policy, self.c_puct, self.n_playout)
+
+    def get_action(self, state, turn, return_prob=0):
+        ## can make temp based on turn #
+        if turn <= self.random_turns:
+            temp = 0.1
+        else:
+            temp = 1e-3
+        sensible_moves = self.game.actions(state)
+        all_moves = self.game.actions(self.game.initial)
+        move_probs = {key: 0.0 for key in all_moves} # the pi vector returned by MCTS as in the alphaGo Zero paper
+        if len(sensible_moves) > 0:
+            acts, probs = self.mcts.get_move_probs(state, temp)
+            #print("acts", acts, "probs", probs)
+            move_probs.update({key: val for (key,val) in zip(acts, probs)})
+            if self.is_selfplay:
+                #move_index = np.argmax(probs)
+                #move_index = np.random.choice(range(len(acts)), p=probs)
+                # add Dirichlet Noise for exploration (needed for self-play training)
+                move_index = np.random.choice(range(len(acts)), p=0.75*probs + 0.25*np.random.dirichlet(0.3*np.ones(len(probs))))
+                move = acts[move_index]
+                self.mcts.update_with_move(move) # update the root node and reuse the search tree
+            else:
+                # with the default temp=1e-3, this is almost equivalent to choosing the move with the highest prob
+                move_index = np.random.choice(range(len(acts)), p=probs)
+                move = acts[move_index]
+                # reset the root node
+                self.mcts.update_with_move(-1)
+            if return_prob:
+                return move, move_probs
+            else:
+                return move
+        else:
+            print("WARNING: the board is full")
+
+    def __str__(self):
+        return "MCTS {}".format(self.player)
 
 players = [
     RandomPlayer("Random"),
@@ -429,4 +516,4 @@ players = [
 ]
 
 # game = TicTacToe()
-# game.tournament(1, *players, verbose=1)
+# game.play_tournament(1, *players, verbose=1)
