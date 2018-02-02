@@ -151,8 +151,15 @@ class MCTS(object):
         # calc the move probabilities based on the visit counts at the root node
         act_visits = [(act, node.n_visits) for act, node in self.root.children.items()
                       if act in allowed_actions]
-        acts, visits = zip(*act_visits)
-        act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
+        if len(act_visits) == 0: ## HOW? Childred, but no valid actions?
+            if len(allowed_actions) == 0:
+                acts, act_probs = [], [] ## No possible moves!
+            else:
+                acts = allowed_actions
+                act_probs = [1/len(allowed_actions) for i in range(len(allowed_actions))]
+        else:
+            acts, visits = zip(*act_visits)
+            act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
         return acts, act_probs
 
     def update_with_move(self, last_move):
