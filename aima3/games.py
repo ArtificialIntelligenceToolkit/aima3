@@ -185,7 +185,10 @@ class Game():
         results = {"DRAW": 0}
         for player in players:
             results[player.name] = 0
-        pairings = [(a,b) for (a,b) in itertools.product(players, players) if a != b]
+        pairings = [(a[1],b[1]) for (a,b) in
+                    itertools.product(enumerate(players), enumerate(players))
+                    if a[0] != b[0]]
+        if verbose: print("Tournament to begin with %s matches..." % len(pairings))
         for (p1, p2) in pairings:
             if mode == "one-each":
                 result = self.play_matches(matches, p1, p2, flip_coin=False, verbose=verbose, **kwargs)
@@ -240,6 +243,8 @@ class Game():
                     self.display(state)
                 if self.terminal_test(state):
                     result = self.utility(state, self.to_move(self.initial))
+                    self.final_utility = result
+                    self.final_state = state
                     if result == 1:
                         retval = [players[0].name]
                     elif result == -1:
@@ -250,6 +255,7 @@ class Game():
                         print("***** %s wins!" % ",".join(retval))
                     return retval
             turn += 1
+
 class Fig52Game(Game):
     """The game represented in [Figure 5.2]. Serves as a simple test case."""
 
