@@ -124,10 +124,11 @@ class MCTS(object):
             state = self.game.result(state, action)
         # Evaluate the leaf using a network which outputs a list of (action, probability)
         # tuples p and also a score v in [-1, 1] for the current player.
-        action_probs, leaf_value = self.policy(self.game, state)
+
         # Check for end of game.
         end = self.game.terminal_test(state)
         if not end:
+            action_probs, leaf_value = self.policy(self.game, state)
             node.expand(action_probs)
         else:
             # for end state，return the "true" leaf_value
