@@ -157,7 +157,7 @@ class MCTS(object):
                 acts, act_probs = [], [] ## No possible moves!
             else:
                 acts = allowed_actions
-                act_probs = [1/len(allowed_actions) for i in range(len(allowed_actions))]
+                act_probs = np.array([1/len(allowed_actions) for i in range(len(allowed_actions))])
         else:
             acts, visits = zip(*act_visits)
             act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
