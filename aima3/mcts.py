@@ -27,6 +27,23 @@ class Node(object):
         self.Q = 0
         self.u = 0
 
+    def depth(self):
+        """
+        Find depth of tree.
+        """
+        return max([child.depth() for child
+                    in self.children.values()] + [0]) + 1
+
+    def visit(self, function, current=0, depth=0):
+        """
+        Find depth of tree.
+        """
+        if current >= depth:
+            return [function(child) for child in self.children.values()]
+        else:
+            return [child.visit(function, current + 1, depth)
+                    for child in self.children.values()]
+
     def expand(self, action_priors):
         """
         Expand tree by creating new children.
@@ -119,7 +136,7 @@ class MCTS(object):
         while (1):
             if node.is_leaf():
                 break
-            # Greedily select next move.
+            # Greedily select next move. Depth first
             action, node = node.select(self.c_puct)
             state = self.game.result(state, action)
         # Evaluate the leaf using a network which outputs a list of (action, probability)

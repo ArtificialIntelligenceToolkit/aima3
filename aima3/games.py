@@ -379,6 +379,29 @@ class TicTacToe(Game):
         n -= 1  # Because we counted move itself twice
         return n >= self.k
 
+    def string_to_state(self, string, move, to_move):
+        string = string.strip()
+        board = {}
+        y = self.h
+        x = 1
+        for s in range(len(string)):
+            if string[s] in [" ", "\n", "\t"]: continue
+            char = string[s]
+            pos = (x,y)
+            if char == ".":
+                pass
+            else:
+                board[pos] = char
+            x += 1
+            if (x - 1) % self.v == 0:
+                x = 1
+                y -= 1
+        moves = self.initial.moves[:]
+        for key in board:
+            moves.remove(key)
+        state = GameState(board=board, to_move=to_move, utility=0, moves=moves)
+        return self.result(state, move)
+
 class ConnectFour(TicTacToe):
     """A TicTacToe-like game in which you can only make a move on the bottom
     row, or in a square directly above an occupied square.  Traditionally
