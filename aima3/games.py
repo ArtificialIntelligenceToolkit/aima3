@@ -3,6 +3,7 @@
 from collections import namedtuple
 import itertools
 import random
+from tqdm import tqdm
 
 import numpy as np
 
@@ -189,7 +190,9 @@ class Game():
                     itertools.product(enumerate(players), enumerate(players))
                     if a[0] != b[0]]
         if verbose: print("Tournament to begin with %s matches..." % len(pairings))
+        pbar = tqdm(total=len(pairings))
         for (p1, p2) in pairings:
+            pbar.update()
             if mode == "one-each":
                 result = self.play_matches(matches, p1, p2, flip_coin=False, verbose=verbose, **kwargs)
                 for player_name in result:
@@ -201,6 +204,7 @@ class Game():
                 result = self.play_matches(matches, p1, p2, flip_coin=(mode=="random"), verbose=verbose, **kwargs)
                 for player_name in result:
                     results[player_name] += result[player_name]
+        pbar.close()
         return results
 
     def play_matches(self, matches, *players, flip_coin=True, verbose=0, **kwargs):
@@ -349,8 +353,8 @@ class TicTacToe(Game):
 
     def display(self, state):
         board = state.board
-        for x in range(1, self.h + 1):
-            for y in range(1, self.v + 1):
+        for y in range(self.v, 0, -1):
+            for x in range(1, self.h + 1):
                 print(board.get((x, y), '.'), end=' ')
             print()
 
@@ -379,10 +383,10 @@ class TicTacToe(Game):
         n -= 1  # Because we counted move itself twice
         return n >= self.k
 
-    def string_to_state(self, string, move, to_move):
+    def string_to_state(self, string, to_move):
         string = string.strip()
         board = {}
-        y = self.h
+        y = self.v
         x = 1
         for s in range(len(string)):
             if string[s] in [" ", "\n", "\t"]: continue
@@ -393,14 +397,13 @@ class TicTacToe(Game):
             else:
                 board[pos] = char
             x += 1
-            if (x - 1) % self.v == 0:
+            if (x - 1) % self.h == 0:
                 x = 1
                 y -= 1
         moves = self.initial.moves[:]
         for key in board:
             moves.remove(key)
-        state = GameState(board=board, to_move=to_move, utility=0, moves=moves)
-        return self.result(state, move)
+        return GameState(board=board, to_move=to_move, utility=0, moves=moves)
 
 class ConnectFour(TicTacToe):
     """A TicTacToe-like game in which you can only make a move on the bottom
@@ -414,20 +417,17 @@ class ConnectFour(TicTacToe):
         return [(x, y) for (x, y) in state.moves
                 if y == 1 or (x, y - 1) in state.board]
 
-    def display(self, state):
-        board = state.board
-        for y in range(self.v + 1, 0, -1):
-            for x in range(1, self.h + 1):
-                print(board.get((x, y), '.'), end=' ')
-            print()
-
 # ______________________________________________________________________________
 # Players for Games
 
 class Player():
     """
     """
-    def __init__(self, name):
+    COUNT = 0
+    def __init__(self, name=None):
+        if name is None:
+            name = "%s-%s" % (self.__class__.__name__, self.__class__.COUNT)
+            self.__class__.COUNT += 1
         self.name = name
 
     def set_game(self, game):
@@ -440,11 +440,12 @@ class Player():
 class QueryPlayer(Player):
     """
     """
+    COUNT = 0
     def get_action(self, state, turn):
         """Make a move by querying standard input."""
-        print("current state:")
+        print("Current state:")
         self.game.display(state)
-        print("available moves: {}".format(self.game.actions(state)))
+        print("Available moves: {}".format(self.game.actions(state)))
         print("")
         move_string = input('Your move? ')
         try:
@@ -454,32 +455,43 @@ class QueryPlayer(Player):
         return move
 
 class RandomPlayer(Player):
+    COUNT = 0
     def get_action(self, state, turn):
         """A player that chooses a legal move at random."""
         return random.choice(self.game.actions(state))
 
 class AlphaBetaPlayer(Player):
+    COUNT = 0
     def get_action(self, state, turn):
         return alphabeta_search(state, self.game)
 
 class MiniMaxPlayer(Player):
+    COUNT = 0
     def get_action(self, state, turn):
         return minimax_decision(state, self.game)
 
 class AlphaBetaCutoffPlayer(Player):
+    COUNT = 0
     def get_action(self, state, turn):
         return alphabeta_cutoff_search(state, self.game, d=4,
                                        cutoff_test=None, eval_fn=None)
 
 class MCTSPlayer(Player):
-    """AI player based on MCTS"""
-    def __init__(self, name, n_playout=20, random_turns=2,
-                 c_puct=5, is_selfplay=True):
+    """
+    AI player based on MCTS
+
+    Use higher temp for exploring the tree. Use is_selfplay=False
+    for best play.
+    """
+    COUNT = 0
+    def __init__(self, name=None, n_playout=100, random_turns=2,
+                 c_puct=5, is_selfplay=False, temp=0.5):
         super().__init__(name)
         self.n_playout = n_playout
         self.random_turns = random_turns
         self.c_puct = c_puct
         self.is_selfplay = is_selfplay
+        self.temp = temp
 
     def policy(self, game, state):
         """
@@ -491,38 +503,37 @@ class MCTSPlayer(Player):
         value = game.utility(state, game.to_move(state))
         actions = game.actions(state)
         if len(actions) == 0:
-            return [], value
+            result = [], value
         else:
             prob = 1/len(actions)
-            return [(action, prob) for action in actions], value
+            result = [(action, prob) for action in actions], value
+        return result
 
     def set_game(self, game):
         self.game = game
-        self.mcts = MCTS(self.game, self.policy, self.c_puct, self.n_playout)
+        self.mcts = MCTS(self.game, self.policy, self.c_puct, self.n_playout, self.temp)
 
     def get_action(self, state, turn, return_prob=0):
-        ## can make temp based on turn #
-        if turn <= self.random_turns:
-            temp = 0.1
-        else:
-            temp = 1e-3
         sensible_moves = self.game.actions(state)
         all_moves = self.game.actions(self.game.initial)
         move_probs = {key: 0.0 for key in all_moves} # the pi vector returned by MCTS as in the alphaGo Zero paper
         if len(sensible_moves) > 0:
-            acts, probs = self.mcts.get_move_probs(state, temp)
-            #print("acts", acts, "probs", probs)
+            acts, probs = self.mcts.get_move_probs(state)
             move_probs.update({key: val for (key,val) in zip(acts, probs)})
             if self.is_selfplay:
-                #move_index = np.argmax(probs)
-                #move_index = np.random.choice(range(len(acts)), p=probs)
                 # add Dirichlet Noise for exploration (needed for self-play training)
                 move_index = np.random.choice(range(len(acts)), p=0.75*probs + 0.25*np.random.dirichlet(0.3*np.ones(len(probs))))
                 move = acts[move_index]
                 self.mcts.update_with_move(move) # update the root node and reuse the search tree
             else:
-                # with the default temp=1e-3, this is almost equivalent to choosing the move with the highest prob
-                move_index = np.random.choice(range(len(acts)), p=probs)
+                # for i in range(len(acts)):
+                #     print("%7s" % (acts[i],), end=" | ")
+                # print()
+                # for i in range(len(probs)):
+                #     print("%7.2f" % (probs[i],), end=" | ")
+                # print()
+                move_index = np.argmax(probs)
+                #move_index = np.random.choice(range(len(acts)), p=probs)
                 move = acts[move_index]
                 # reset the root node
                 self.mcts.update_with_move(-1)
@@ -537,11 +548,11 @@ class MCTSPlayer(Player):
         return "MCTS {}".format(self.player)
 
 players = [
-    RandomPlayer("Random"),
-    AlphaBetaPlayer("AlphaBeta"),
-    MiniMaxPlayer("Minimax"),
-    AlphaBetaCutoffPlayer("AlphaBetaCutoff"),
-    MCTSPlayer("MonteCarloTreeSearch")
+    RandomPlayer(),
+    AlphaBetaPlayer(),
+    MiniMaxPlayer(),
+    AlphaBetaCutoffPlayer(),
+    MCTSPlayer()
 ]
 
 # game = TicTacToe()

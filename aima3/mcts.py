@@ -31,18 +31,17 @@ class Node(object):
         """
         Find depth of tree.
         """
-        return max([child.depth() for child
-                    in self.children.values()] + [0]) + 1
-
-    def visit(self, function, current=0, depth=0):
-        """
-        Find depth of tree.
-        """
-        if current >= depth:
-            return [function(child) for child in self.children.values()]
+        children = list(self.children.values())
+        if children == []:
+            return 0
         else:
-            return [child.visit(function, current + 1, depth)
-                    for child in self.children.values()]
+            return max([child.depth() for child in children]) + 1
+
+    def visit(self, function):
+        """
+        Visit the nodes in a tree, layer by layer.
+        """
+        return (function(self), [child.visit(function) for child in self.children.values()])
 
     def expand(self, action_priors):
         """
@@ -110,20 +109,23 @@ class MCTS(object):
     A simple implementation of Monte Carlo Tree Search.
     """
 
-    def __init__(self, game, policy_value_fn, c_puct=5, n_playout=10000):
+    def __init__(self, game, policy_value_fn, c_puct=5, n_playout=10000, temp=0.5):
         """
         Arguments:
-        policy_value_fn -- a function that takes in a game and board state and outputs a list of (action, probability)
-            tuples and also a score in [-1, 1] (i.e. the expected value of the end game score from
-            the current player's perspective) for the current player.
-        c_puct -- a number in (0, inf) that controls how quickly exploration converges to the
-            maximum-value policy, where a higher value means relying on the prior more
+            policy_value_fn -- a function that takes in a game and board state and outputs a list of (action, probability)
+                tuples and also a score in [-1, 1] (i.e. the expected value of the end game score from
+                the current player's perspective) for the current player.
+            c_puct -- a number in (0, inf) that controls how quickly exploration converges to the
+                maximum-value policy, where a higher value means relying on the prior more
+            temp -- temperature parameter in (0, 1] that controls the level of exploration;
+                very small almost always picks the best path; 1.0 is random chance.
         """
         self.game = game
         self.root = Node(None, 1.0)
         self.policy = policy_value_fn
         self.c_puct = c_puct
         self.n_playout = n_playout
+        self.temp = temp
 
     def playout(self, state):
         """Run a single playout from the root to the leaf, getting a value at the leaf and
@@ -153,12 +155,11 @@ class MCTS(object):
         # Update value and visit count of nodes in this traversal.
         node.update_recursive(-leaf_value)
 
-    def get_move_probs(self, state, temp=1e-3):
+    def get_move_probs(self, state):
         """
         Runs all playouts sequentially and returns the available actions and their corresponding probabilities
         Arguments:
             state -- the current state, including both game state and the current player.
-            temp -- temperature parameter in (0, 1] that controls the level of exploration
         Returns:
             the available actions and the corresponding probabilities
         """
@@ -177,14 +178,13 @@ class MCTS(object):
                 act_probs = np.array([1/len(allowed_actions) for i in range(len(allowed_actions))])
         else:
             acts, visits = zip(*act_visits)
-            act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
+            act_probs = softmax(1.0/self.temp * np.log(np.array(visits) + 1e-10))
         return acts, act_probs
 
     def update_with_move(self, last_move):
         """
         Step forward in the tree, keeping everything we already know about the subtree.
         """
-        #print("Updating with last_move:", last_move, self.root.children)
         if last_move in self.root.children:
             self.root = self.root.children[last_move]
             self.root.parent = None

@@ -28,7 +28,7 @@ setup(name='aima3',
       author='Douglas Blank',
       author_email='doug.blank@gmail.com',
       url='https://github.com/Calysto/aima3',
-      install_requires=['networkx==1.11', 'jupyter'],
+      install_requires=['networkx==1.11', 'jupyter', 'tqdm'],
       packages=find_packages(include=['aima3', 'aima3.*']),
       classifiers=[
           'Framework :: IPython',
