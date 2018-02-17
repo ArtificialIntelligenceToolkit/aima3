@@ -3,7 +3,7 @@
 from collections import namedtuple
 import itertools
 import random
-from tqdm import tqdm
+from tqdm import tqdm, tqdm_notebook
 
 import numpy as np
 
@@ -176,12 +176,18 @@ class Game():
     def __repr__(self):
         return '<{}>'.format(self.__class__.__name__)
 
-    def play_tournament(self, matches, *players, mode="random", verbose=0, **kwargs):
+    def play_tournament(self, matches, *players, mode="random", verbose=1,
+                        notebook=False, bar=None, **kwargs):
         """
         mode -
           "random" - randomly select who gos first
           "ordered" - play in order given
           ""one-each" - play each pairing twice, changing who goes first
+        verbose -
+          0 - no output
+          1 - status bar only
+          2 - print summary
+          3 - print detail
         """
         results = {"DRAW": 0}
         for player in players:
@@ -189,42 +195,67 @@ class Game():
         pairings = [(a[1],b[1]) for (a,b) in
                     itertools.product(enumerate(players), enumerate(players))
                     if a[0] != b[0]]
-        if verbose: print("Tournament to begin with %s matches..." % len(pairings))
-        pbar = tqdm(total=len(pairings))
+        need_to_close_bar = True
+        if mode == "one-each":
+            total = len(pairings) * matches * 2
+        else:
+            total = len(pairings) * matches
+        if verbose >= 2:
+            print("Tournament to begin with %s matches..." % total)
+        elif verbose == 1:
+            if bar is None:
+                need_to_close_bar = True
+                if notebook:
+                    bar = tqdm_notebook(total=total)
+                else:
+                    bar = tqdm(total=total)
         for (p1, p2) in pairings:
-            pbar.update()
             if mode == "one-each":
-                result = self.play_matches(matches, p1, p2, flip_coin=False, verbose=verbose, **kwargs)
+                result = self.play_matches(matches, p1, p2, flip_coin=False, verbose=verbose, bar=bar, **kwargs)
                 for player_name in result:
                     results[player_name] += result[player_name]
-                result = self.play_matches(matches, p2, p1, flip_coin=False, verbose=verbose, **kwargs)
+                result = self.play_matches(matches, p2, p1, flip_coin=False, verbose=verbose, bar=bar, **kwargs)
                 for player_name in result:
                     results[player_name] += result[player_name]
             else:
-                result = self.play_matches(matches, p1, p2, flip_coin=(mode=="random"), verbose=verbose, **kwargs)
+                result = self.play_matches(matches, p1, p2, flip_coin=(mode=="random"), verbose=verbose, bar=bar, **kwargs)
                 for player_name in result:
                     results[player_name] += result[player_name]
-        pbar.close()
+        if need_to_close_bar:
+            bar.close()
         return results
 
-    def play_matches(self, matches, *players, flip_coin=True, verbose=0, **kwargs):
+    def play_matches(self, matches, *players, flip_coin=True, verbose=1,
+                     notebook=False, bar=None, **kwargs):
         results = {"DRAW": 0}
         for player in players:
             results[player.name] = 0
+        need_to_close_bar = False
+        if verbose == 1:
+            if bar is None:
+                need_to_close_bar = True
+                if notebook:
+                    bar = tqdm_notebook(total=matches)
+                else:
+                    bar = tqdm(total=matches)
         for i in range(matches):
+            if verbose == 1:
+                bar.update()
             result = self.play_game(*players, flip_coin=flip_coin, verbose=verbose, **kwargs)
             for player_name in result:
                 results[player_name] += 1
+        if need_to_close_bar:
+            bar.close()
         return results
 
-    def get_action(self, player, state, turn, **kwargs):
+    def get_action(self, player, state, turn, verbose, **kwargs):
         """
         Level of indirection for overriding this method.
         """
-        move = player.get_action(state, turn, **kwargs)
+        move = player.get_action(state, turn, verbose, **kwargs)
         return move
 
-    def play_game(self, *players, flip_coin=True, verbose=1, **kwargs):
+    def play_game(self, *players, flip_coin=True, verbose=2, **kwargs):
         """Play an n-person, move-alternating game."""
         if len(players) == 0:
             raise Exception("Need at least 1 player")
@@ -238,11 +269,11 @@ class Game():
         turn = 1
         while True:
             for player in players:
-                if verbose:
+                if verbose >= 2:
                     print("%s is thinking..." % player.name)
-                move = self.get_action(player, state, turn, **kwargs)
+                move = self.get_action(player, state, turn, verbose, **kwargs)
                 state = self.result(state, move)
-                if verbose:
+                if verbose >= 2:
                     print("%s makes action %s:" % (player.name, move))
                     self.display(state)
                 if self.terminal_test(state):
@@ -255,7 +286,7 @@ class Game():
                         retval = [p.name for p in players[1:]]
                     elif result == 0:
                         retval = ["DRAW"]
-                    if verbose:
+                    if verbose >= 2:
                         print("***** %s wins!" % ",".join(retval))
                     return retval
             turn += 1
@@ -434,14 +465,14 @@ class Player():
         ## do init or reset business here in overload
         self.game = game
 
-    def get_action(self, state, turn):
+    def get_action(self, state, turn, verbose):
         raise NotImplementedError()
 
 class QueryPlayer(Player):
     """
     """
     COUNT = 0
-    def get_action(self, state, turn):
+    def get_action(self, state, turn, verbose):
         """Make a move by querying standard input."""
         print("Current state:")
         self.game.display(state)
@@ -456,23 +487,23 @@ class QueryPlayer(Player):
 
 class RandomPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn):
+    def get_action(self, state, turn, verbose):
         """A player that chooses a legal move at random."""
         return random.choice(self.game.actions(state))
 
 class AlphaBetaPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn):
+    def get_action(self, state, turn, verbose):
         return alphabeta_search(state, self.game)
 
 class MiniMaxPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn):
+    def get_action(self, state, turn, verbose):
         return minimax_decision(state, self.game)
 
 class AlphaBetaCutoffPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn):
+    def get_action(self, state, turn, verbose):
         return alphabeta_cutoff_search(state, self.game, d=4,
                                        cutoff_test=None, eval_fn=None)
 
@@ -484,11 +515,9 @@ class MCTSPlayer(Player):
     for best play.
     """
     COUNT = 0
-    def __init__(self, name=None, n_playout=100, random_turns=2,
-                 c_puct=5, is_selfplay=False, temp=0.5):
+    def __init__(self, name=None, n_playout=100, c_puct=5, is_selfplay=False, temp=0.5):
         super().__init__(name)
         self.n_playout = n_playout
-        self.random_turns = random_turns
         self.c_puct = c_puct
         self.is_selfplay = is_selfplay
         self.temp = temp
@@ -513,7 +542,7 @@ class MCTSPlayer(Player):
         self.game = game
         self.mcts = MCTS(self.game, self.policy, self.c_puct, self.n_playout, self.temp)
 
-    def get_action(self, state, turn, return_prob=0):
+    def get_action(self, state, turn, verbose, return_prob=0):
         sensible_moves = self.game.actions(state)
         all_moves = self.game.actions(self.game.initial)
         move_probs = {key: 0.0 for key in all_moves} # the pi vector returned by MCTS as in the alphaGo Zero paper
