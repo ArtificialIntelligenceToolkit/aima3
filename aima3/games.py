@@ -146,6 +146,14 @@ class Game():
     need to set the .initial attribute to the initial state; this can
     be done in the constructor."""
 
+    def __init__(self, notebook=False, *args, **kwargs):
+        """
+        Arguments:
+            notebook (bool) - use True if running in a Jupyter notebook
+                supporting widgets.
+        """
+        self.notebook = notebook
+
     def reset(self):
         pass
 
@@ -177,7 +185,7 @@ class Game():
         return '<{}>'.format(self.__class__.__name__)
 
     def play_tournament(self, matches, *players, mode="random", verbose=1,
-                        notebook=False, bar=None, **kwargs):
+                        bar=None, **kwargs):
         """
         mode -
           "random" - randomly select who gos first
@@ -205,7 +213,7 @@ class Game():
         elif verbose == 1:
             if bar is None:
                 need_to_close_bar = True
-                if notebook:
+                if self.notebook:
                     bar = tqdm_notebook(total=total)
                 else:
                     bar = tqdm(total=total)
@@ -226,7 +234,7 @@ class Game():
         return results
 
     def play_matches(self, matches, *players, flip_coin=True, verbose=1,
-                     notebook=False, bar=None, **kwargs):
+                     bar=None, **kwargs):
         results = {"DRAW": 0}
         for player in players:
             results[player.name] = 0
@@ -234,7 +242,7 @@ class Game():
         if verbose == 1:
             if bar is None:
                 need_to_close_bar = True
-                if notebook:
+                if self.notebook:
                     bar = tqdm_notebook(total=matches)
                 else:
                     bar = tqdm(total=matches)
@@ -248,11 +256,11 @@ class Game():
             bar.close()
         return results
 
-    def get_action(self, player, state, turn, verbose, **kwargs):
+    def get_action(self, player, state, turn=1, verbose=0, **kwargs):
         """
         Level of indirection for overriding this method.
         """
-        move = player.get_action(state, turn, verbose, **kwargs)
+        move = player.get_action(state, turn=1, verbose=0, **kwargs)
         return move
 
     def play_game(self, *players, flip_coin=True, verbose=2, **kwargs):
@@ -286,6 +294,8 @@ class Game():
                         retval = [p.name for p in players[1:]]
                     elif result == 0:
                         retval = ["DRAW"]
+                    else:
+                        retval = ["Result %s" % result]
                     if verbose >= 2:
                         print("***** %s wins!" % ",".join(retval))
                     return retval
@@ -351,7 +361,8 @@ class TicTacToe(Game):
     the form of a list of (x, y) positions, and a board, in the form of
     a dict of {(x, y): Player} entries, where Player is 'X' or 'O'."""
 
-    def __init__(self, h=3, v=3, k=3):
+    def __init__(self, h=3, v=3, k=3, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.h = h
         self.v = v
         self.k = k
@@ -465,14 +476,14 @@ class Player():
         ## do init or reset business here in overload
         self.game = game
 
-    def get_action(self, state, turn, verbose):
+    def get_action(self, state, turn=1, verbose=0):
         raise NotImplementedError()
 
 class QueryPlayer(Player):
     """
     """
     COUNT = 0
-    def get_action(self, state, turn, verbose):
+    def get_action(self, state, turn=1, verbose=0):
         """Make a move by querying standard input."""
         print("Current state:")
         self.game.display(state)
@@ -487,23 +498,23 @@ class QueryPlayer(Player):
 
 class RandomPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn, verbose):
+    def get_action(self, state, turn=1, verbose=0):
         """A player that chooses a legal move at random."""
         return random.choice(self.game.actions(state))
 
 class AlphaBetaPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn, verbose):
+    def get_action(self, state, turn=1, verbose=0):
         return alphabeta_search(state, self.game)
 
 class MiniMaxPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn, verbose):
+    def get_action(self, state, turn=1, verbose=0):
         return minimax_decision(state, self.game)
 
 class AlphaBetaCutoffPlayer(Player):
     COUNT = 0
-    def get_action(self, state, turn, verbose):
+    def get_action(self, state, turn=1, verbose=0):
         return alphabeta_cutoff_search(state, self.game, d=4,
                                        cutoff_test=None, eval_fn=None)
 
@@ -542,7 +553,7 @@ class MCTSPlayer(Player):
         self.game = game
         self.mcts = MCTS(self.game, self.policy, self.c_puct, self.n_playout, self.temp)
 
-    def get_action(self, state, turn, verbose, return_prob=0):
+    def get_action(self, state, turn=1, verbose=0, return_prob=0):
         sensible_moves = self.game.actions(state)
         all_moves = self.game.actions(self.game.initial)
         move_probs = {key: 0.0 for key in all_moves} # the pi vector returned by MCTS as in the alphaGo Zero paper

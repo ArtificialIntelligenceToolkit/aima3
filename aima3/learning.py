@@ -1103,18 +1103,18 @@ def learningcurve(learner, dataset, trials=10, sizes=None):
 # The rest of this file gives datasets for machine learning problems.
 
 
-orings = DataSet(name='orings', target='Distressed',
-                 attrnames="Rings Distressed Temp Pressure Flightnum")
+# orings = DataSet(name='orings', target='Distressed',
+#                  attrnames="Rings Distressed Temp Pressure Flightnum")
 
 
-zoo = DataSet(name='zoo', target='type', exclude=['name'],
-              attrnames="name hair feathers eggs milk airborne aquatic " +
-              "predator toothed backbone breathes venomous fins legs tail " +
-              "domestic catsize type")
+# zoo = DataSet(name='zoo', target='type', exclude=['name'],
+#               attrnames="name hair feathers eggs milk airborne aquatic " +
+#               "predator toothed backbone breathes venomous fins legs tail " +
+#               "domestic catsize type")
 
 
-iris = DataSet(name="iris", target="class",
-               attrnames="sepal-len sepal-width petal-len petal-width class")
+# iris = DataSet(name="iris", target="class",
+#                attrnames="sepal-len sepal-width petal-len petal-width class")
 
 # ______________________________________________________________________________
 # The Restaurant example from [Figure 18.2]
@@ -1127,7 +1127,7 @@ def RestaurantDataSet(examples=None):
                    'Raining Reservation Type WaitEstimate Wait')
 
 
-restaurant = RestaurantDataSet()
+# restaurant = RestaurantDataSet()
 
 
 def T(attrname, branches):
@@ -1141,24 +1141,24 @@ def T(attrname, branches):
 A decision tree for deciding whether to wait for a table at a hotel.
 """
 
-waiting_decision_tree = T('Patrons',
-                          {'None': 'No', 'Some': 'Yes',
-                           'Full': T('WaitEstimate',
-                                     {'>60': 'No', '0-10': 'Yes',
-                                      '30-60': T('Alternate',
-                                                 {'No': T('Reservation',
-                                                          {'Yes': 'Yes',
-                                                           'No': T('Bar', {'No': 'No',
-                                                                           'Yes': 'Yes'})}),
-                                                  'Yes': T('Fri/Sat', {'No': 'No', 'Yes': 'Yes'})}
-                                                 ),
-                                      '10-30': T('Hungry',
-                                                 {'No': 'Yes',
-                                                  'Yes': T('Alternate',
-                                                           {'No': 'Yes',
-                                                            'Yes': T('Raining',
-                                                                     {'No': 'No',
-                                                                      'Yes': 'Yes'})})})})})
+# waiting_decision_tree = T('Patrons',
+#                           {'None': 'No', 'Some': 'Yes',
+#                            'Full': T('WaitEstimate',
+#                                      {'>60': 'No', '0-10': 'Yes',
+#                                       '30-60': T('Alternate',
+#                                                  {'No': T('Reservation',
+#                                                           {'Yes': 'Yes',
+#                                                            'No': T('Bar', {'No': 'No',
+#                                                                            'Yes': 'Yes'})}),
+#                                                   'Yes': T('Fri/Sat', {'No': 'No', 'Yes': 'Yes'})}
+#                                                  ),
+#                                       '10-30': T('Hungry',
+#                                                  {'No': 'Yes',
+#                                                   'Yes': T('Alternate',
+#                                                            {'No': 'Yes',
+#                                                             'Yes': T('Raining',
+#                                                                      {'No': 'No',
+#                                                                       'Yes': 'Yes'})})})})})
 
 
 def SyntheticRestaurant(n=20):
@@ -1211,14 +1211,14 @@ def ContinuousXor(n):
 # ______________________________________________________________________________
 
 
-def compare(algorithms=[PluralityLearner, NaiveBayesLearner,
-                        NearestNeighborLearner, DecisionTreeLearner],
-            datasets=[iris, orings, zoo, restaurant, SyntheticRestaurant(20),
-                      Majority(7, 100), Parity(7, 100), Xor(100)],
-            k=10, trials=1):
-    """Compare various learners on various datasets using cross-validation.
-    Print results as a table."""
-    print_table([[a.__name__.replace('Learner', '')] +
-                 [cross_validation(a, d, k, trials) for d in datasets]
-                 for a in algorithms],
-                header=[''] + [d.name[0:7] for d in datasets], numfmt='%.2f')
+# def compare(algorithms=[PluralityLearner, NaiveBayesLearner,
+#                         NearestNeighborLearner, DecisionTreeLearner],
+#             datasets=[iris, orings, zoo, restaurant, SyntheticRestaurant(20),
+#                       Majority(7, 100), Parity(7, 100), Xor(100)],
+#             k=10, trials=1):
+#     """Compare various learners on various datasets using cross-validation.
+#     Print results as a table."""
+#     print_table([[a.__name__.replace('Learner', '')] +
+#                  [cross_validation(a, d, k, trials) for d in datasets]
+#                  for a in algorithms],
+#                 header=[''] + [d.name[0:7] for d in datasets], numfmt='%.2f')
