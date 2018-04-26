@@ -153,6 +153,7 @@ class Game():
                 supporting widgets.
         """
         self.notebook = notebook
+        self.number_of_players = 2
 
     def reset(self):
         pass
@@ -188,9 +189,9 @@ class Game():
                         bar=None, **kwargs):
         """
         mode -
-          "random" - randomly select who gos first
+          "random" - randomly select who goes first
           "ordered" - play in order given
-          ""one-each" - play each pairing twice, changing who goes first
+          "one-each" - play each pairing twice, changing who goes first
         verbose -
           0 - no output
           1 - status bar only
@@ -235,6 +236,8 @@ class Game():
 
     def play_matches(self, matches, *players, flip_coin=True, verbose=1,
                      bar=None, **kwargs):
+        if len(players) != self.number_of_players:
+            raise Exception("this game is limited to %d players" % self.number_of_players)
         results = {"DRAW": 0}
         for player in players:
             results[player.name] = 0
@@ -479,7 +482,7 @@ class Player():
     def get_action(self, state, turn=1, verbose=0):
         raise NotImplementedError()
 
-class QueryPlayer(Player):
+class HumanPlayer(Player):
     """
     """
     COUNT = 0
@@ -566,12 +569,13 @@ class MCTSPlayer(Player):
                 move = acts[move_index]
                 self.mcts.update_with_move(move) # update the root node and reuse the search tree
             else:
-                # for i in range(len(acts)):
-                #     print("%7s" % (acts[i],), end=" | ")
-                # print()
-                # for i in range(len(probs)):
-                #     print("%7.2f" % (probs[i],), end=" | ")
-                # print()
+                if verbose >= 3:
+                    for i in range(len(acts)):
+                        print("%7s" % (acts[i],), end=" | ")
+                    print()
+                    for i in range(len(probs)):
+                        print("%7.2f" % (probs[i],), end=" | ")
+                    print()
                 move_index = np.argmax(probs)
                 #move_index = np.random.choice(range(len(acts)), p=probs)
                 move = acts[move_index]
